@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .routers import transcribe, analyze_text, questions, sessions
+from .routers import transcribe, analyze_text, questions, sessions, report
 from .db import init_db
 
 app = FastAPI(title="Interview Coach API")
@@ -29,3 +29,4 @@ app.include_router(transcribe.router)
 app.include_router(analyze_text.router)
 app.include_router(questions.router)
 app.include_router(sessions.router)
+app.include_router(report.router)

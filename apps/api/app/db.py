@@ -1,5 +1,5 @@
 import os
-from sqlmodel import SQLModel, create_engine
+from sqlmodel import SQLModel, create_engine, Session as DBSession
 
 DB_URL = os.getenv("DATABASE_URL", "postgresql+psycopg2://coach:coach@localhost:5432/coach")
 engine = create_engine(DB_URL, echo=False)
@@ -7,3 +7,7 @@ engine = create_engine(DB_URL, echo=False)
 def init_db():
     from .models import Question, Session, Analysis
     SQLModel.metadata.create_all(engine)
+
+def get_session() -> DBSession:
+    # usage: with get_session() as s: ...
+    return DBSession(engine)
