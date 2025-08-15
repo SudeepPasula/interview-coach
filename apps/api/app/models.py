@@ -1,22 +1,23 @@
+# apps/api/app/models.py
 from __future__ import annotations
-from datetime import datetime
-from typing import Optional, Dict, Any
 
-from sqlmodel import SQLModel, Field
-from sqlalchemy import Column
-from sqlalchemy.dialects.postgresql import JSONB
+from datetime import datetime
+from typing import Any
+
+from sqlalchemy import JSON, Column
+from sqlmodel import Field, SQLModel
 
 
 class Question(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     role: str
     text: str
-    # store list of strings in Postgres JSONB
-    key_points: list[str] = Field(default_factory=list, sa_column=Column(JSONB))
+    # Cross-dialect JSON (works in SQLite tests and Postgres in Docker)
+    key_points: list[str] = Field(default_factory=list, sa_column=Column(JSON))
 
 
 class Session(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     role: str
     question_id: int
     started_at: datetime = Field(default_factory=datetime.utcnow)
@@ -24,9 +25,9 @@ class Session(SQLModel, table=True):
 
 
 class Analysis(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     session_id: int
     transcript: str
-    # store nested metrics dict in Postgres JSONB
-    metrics: Dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB))
+    # Nested metrics dict stored as JSON
+    metrics: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     created_at: datetime = Field(default_factory=datetime.utcnow)

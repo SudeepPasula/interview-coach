@@ -1,9 +1,8 @@
 # apps/api/app/scoring.py
 from __future__ import annotations
 
-import re
 import math
-from typing import List, Dict
+import re
 
 import numpy as np
 from sentence_transformers import SentenceTransformer, util
@@ -13,8 +12,15 @@ EMB = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
 # ---- Heuristics ----
 FILLERS = {
-    "um", "uh", "like", "you know", "sort of", "kind of",
-    "basically", "actually", "literally"
+    "um",
+    "uh",
+    "like",
+    "you know",
+    "sort of",
+    "kind of",
+    "basically",
+    "actually",
+    "literally",
 }
 
 # Optional: prioritize which key points matter most when crafting tips
@@ -34,7 +40,7 @@ def words_per_minute(text: str, duration_s: float) -> float:
     return 0.0 if duration_s <= 0 else (w / (duration_s / 60.0))
 
 
-def filler_stats(text: str) -> Dict:
+def filler_stats(text: str) -> dict:
     """Count common filler words/phrases (case-insensitive, phrase-aware)."""
     lower = text.lower()
     counts = {}
@@ -45,7 +51,7 @@ def filler_stats(text: str) -> Dict:
     return {"counts": counts, "total": int(sum(counts.values()))}
 
 
-def coverage_score(transcript: str, key_points: List[str]) -> Dict:
+def coverage_score(transcript: str, key_points: list[str]) -> dict:
     """
     Score how well the transcript covers the provided key_points by combining:
       - Substring hits (exact-ish phrase presence, case-insensitive)
@@ -82,7 +88,7 @@ def coverage_score(transcript: str, key_points: List[str]) -> Dict:
 
     # Build list of (original_kp, sim, matched_bool) with small boost for substring hits
     scored = []
-    for kp_raw, kp_lower, s in zip(key_points, kp_norm, sims):
+    for kp_raw, kp_lower, s in zip(key_points, kp_norm, sims, strict=False):
         s = float(s)
         substring_hit = kp_lower in substring_matched
         matched = substring_hit or (s >= THRESH)
@@ -105,16 +111,16 @@ def coverage_score(transcript: str, key_points: List[str]) -> Dict:
     return {"matched": matched, "score": score}
 
 
-def tips_from_metrics(coverage: Dict, fillers: Dict, wpm: float, key_points: List[str]) -> List[str]:
+def tips_from_metrics(
+    coverage: dict, fillers: dict, wpm: float, key_points: list[str]
+) -> list[str]:
     """Produce a concise, actionable list of coaching tips."""
-    tips: List[str] = []
+    tips: list[str] = []
 
     matched = set(coverage.get("matched", []))
     # sort missing by priority if known
     missing = [k for k in key_points if k not in matched]
-    missing_sorted = sorted(
-        missing, key=lambda k: -IMPORTANCE.get(k.lower(), 1)
-    )
+    missing_sorted = sorted(missing, key=lambda k: -IMPORTANCE.get(k.lower(), 1))
 
     if coverage.get("score", 0.0) < 0.6 and missing_sorted:
         tips.append("Add missing points: " + ", ".join(missing_sorted[:3]))
@@ -128,22 +134,22 @@ def tips_from_metrics(coverage: Dict, fillers: Dict, wpm: float, key_points: Lis
     return tips
 
 
-def overall_score(coverage: Dict, fillers: Dict, wpm: float) -> float:
+def overall_score(coverage: dict, fillers: dict, wpm: float) -> float:
     """
     Weighted final score with emphasis on content coverage.
     - coverage: 60%
     - filler discipline: 20%
     - pace clarity: 20%
     """
-    cov = coverage.get("score", 0.0)                 # 0..1, higher is better
-    fil = 1 - min(fillers.get("total", 0) / 10, 1)   # 1 best; 0 worst past 10 fillers
-    pace_pen = min(abs(150 - wpm) / 150, 1)          # 0 best near 150 WPM
+    cov = coverage.get("score", 0.0)  # 0..1, higher is better
+    fil = 1 - min(fillers.get("total", 0) / 10, 1)  # 1 best; 0 worst past 10 fillers
+    pace_pen = min(abs(150 - wpm) / 150, 1)  # 0 best near 150 WPM
     pace = 1 - pace_pen
     return round(0.6 * cov + 0.2 * fil + 0.2 * pace, 3)
 
 
 # -------------------- Public API --------------------
-def analyze(transcript: str, role: str, key_points: List[str], duration_s: float) -> Dict:
+def analyze(transcript: str, role: str, key_points: list[str], duration_s: float) -> dict:
     """
     Main entry point used by tasks.py / API:
       - Computes WPM, filler stats, coverage, tips, and overall score.

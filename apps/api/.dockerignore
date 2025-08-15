@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.venv
+.dmypy.json
+.pytest_cache/
+
+# Git & editor
+.git/
+.gitignore
+.vscode/
+.idea/
+
+# Cache / downloads
+.cache/
+.tmp/
+*.log
+
+# Large/local artifacts
+*.wav
+*.webm
+*.aiff
+*.mp3
+*.m4a
+*.pdf
+*.csv
+
+# Frontend stuff (safety)
+node_modules/

@@ -1,11 +1,14 @@
-from typing import Dict, Any
+from typing import Any
+
 from sqlmodel import Session as DBSession
+
 from .db import engine
 from .models import Analysis
-from .scoring import analyze  # whatever function you use now to score
 from .routers.transcribe import transcribe_bytes
+from .scoring import analyze  # whatever function you use now to score
 
-def run_full_pipeline(session_id: int, audio_bytes: bytes, filename: str) -> Dict[str, Any]:
+
+def run_full_pipeline(session_id: int, audio_bytes: bytes, filename: str) -> dict[str, Any]:
     """
     Background job: transcribe -> analyze -> save Analysis row.
     Returns metrics dict.
@@ -21,13 +24,17 @@ def run_full_pipeline(session_id: int, audio_bytes: bytes, filename: str) -> Dic
     # 2) Analyze
     # You’ll need role/question_id/duration; simplest is to recompute duration from transcript or pass them in.
     # For now, stub duration=60 and role/question_id from session
-    from .models import Session as SessionModel, Question
+    from .models import Question
+    from .models import Session as SessionModel
+
     with DBSession(engine) as s:
         sess = s.get(SessionModel, session_id)
         if not sess:
             raise RuntimeError("Session not found")
         q = s.get(Question, sess.question_id)
-        metrics = analyze(transcript, role=sess.role, key_points=q.key_points, duration_s=sess.duration_s or 60)
+        metrics = analyze(
+            transcript, role=sess.role, key_points=q.key_points, duration_s=sess.duration_s or 60
+        )
 
         # 3) Save Analysis row
         row = Analysis(session_id=session_id, transcript=transcript, metrics=metrics)

@@ -1,0 +1,12 @@
+line-length = 100
+target-version = "py311"
+fix = true
+
+[lint]
+select = ["E", "F", "B"]
+ignore = [
+  "E203",  # whitespace before :
+  "E266",  # too many leading '#'
+  "E501",  # we'll still try to wrap long lines in code below
+  "B905",  # zip strict
+]

@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   db:
     image: postgres:16
@@ -5,10 +7,83 @@ services:
       POSTGRES_USER: coach
       POSTGRES_PASSWORD: coach
       POSTGRES_DB: coach
-    ports: ["5432:5432"]
-    volumes: [db-data:/var/lib/postgresql/data]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U coach -d coach"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
   redis:
     image: redis:7
-    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://coach:coach@db:5432/coach
+      REDIS_URL: redis://redis:6379/0
+      CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      # If you want to force the Chromium path used by pyppeteer:
+      CHROMIUM_PATH: /usr/bin/chromium
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./apps/api:/app
+      - hf_cache:/root/.cache/huggingface
+      - pypp_cache:/root/.local/share/pyppeteer
+    command: >
+      bash -lc "uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    shm_size: "1gb"
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://coach:coach@db:5432/coach
+      REDIS_URL: redis://redis:6379/0
+      CHROMIUM_PATH: /usr/bin/chromium
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./apps/api:/app
+      - hf_cache:/root/.cache/huggingface
+      - pypp_cache:/root/.local/share/pyppeteer
+    command: >
+      bash -lc "python worker.py"
+    shm_size: "1gb"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python - <<'PY'\nfrom redis import Redis\nRedis.from_url('redis://redis:6379/0').ping()\nprint('ok')\nPY"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
 volumes:
-  db-data:
+  pgdata:
+  hf_cache:
+  pypp_cache:

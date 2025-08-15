@@ -1,16 +1,24 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
-from typing import Optional
-from ..scoring import coverage_score, filler_stats, words_per_minute, tips_from_metrics, overall_score
+
 from ..questions import QUESTIONS
+from ..scoring import (
+    coverage_score,
+    filler_stats,
+    overall_score,
+    tips_from_metrics,
+    words_per_minute,
+)
 
 router = APIRouter(prefix="/analyze_text", tags=["analyze"])
+
 
 class AnalyzeReq(BaseModel):
     transcript: str
     role: str = "SWE"
-    question_id: Optional[int] = 1
+    question_id: int | None = 1
     duration_s: float = 60.0
+
 
 @router.post("")
 def analyze(req: AnalyzeReq):

@@ -1,8 +1,9 @@
-# apps/api/app/routers/jobs.py
 from __future__ import annotations
 
 import os
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from typing import Annotated
+
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 from redis import Redis
 from rq import Queue
@@ -12,7 +13,7 @@ from rq.job import Job
 try:
     from rq.retry import Retry  # may not exist on your version
 except Exception:
-    Retry = None  # type: ignore
+    Retry = None  # type: ignore[assignment]
 
 from ..tasks import run_full_pipeline
 
@@ -24,13 +25,20 @@ q = Queue("ic-jobs", connection=redis, default_timeout=900)  # 15 min
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 
+
 @router.post("/enqueue")
-async def enqueue_job(session_id: int, file: UploadFile = File(...)):
+async def enqueue_job(
+    session_id: int,
+    file: Annotated[UploadFile, File(...)],
+):
     blob = await file.read()
     if not blob:
-        raise HTTPException(400, "Empty file")
+        raise HTTPException(status_code=400, detail="Empty file")
     if len(blob) > MAX_UPLOAD_BYTES:
-        raise HTTPException(413, f"File too large (> {MAX_UPLOAD_BYTES // (1024*1024)} MB)")
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large (> {MAX_UPLOAD_BYTES // (1024 * 1024)} MB)",
+        )
 
     enqueue_kwargs = {
         "description": f"session:{session_id} file:{file.filename}",
@@ -49,17 +57,22 @@ async def enqueue_job(session_id: int, file: UploadFile = File(...)):
 
     return JSONResponse(
         status_code=202,
-        content={"job_id": job.get_id(), "enqueued": True, "poll_url": f"/jobs/{job.get_id()}"},
+        content={
+            "job_id": job.get_id(),
+            "enqueued": True,
+            "poll_url": f"/jobs/{job.get_id()}",
+        },
     )
+
 
 @router.get("/{job_id}")
 def job_status(job_id: str):
     try:
         job: Job = Job.fetch(job_id, connection=redis)
-    except Exception:
-        raise HTTPException(404, "Job not found")
+    except Exception as e:
+        raise HTTPException(status_code=404, detail="Job not found") from e
 
-    payload = {
+    payload: dict[str, object] = {
         "id": job.get_id(),
         "status": job.get_status(),  # queued|started|deferred|finished|failed
         "enqueued_at": getattr(job, "enqueued_at", None),

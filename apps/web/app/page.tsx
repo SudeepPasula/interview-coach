@@ -1,103 +1,195 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { api, API_BASE } from "@/lib/api";
+import type { ReportJson } from "@/lib/types";
+import QuestionCard from "@/components/QuestionCard";
+import RecorderCard from "@/components/RecorderCard";
+import JobStatusCard from "@/components/JobStatusCard";
+import ReportCard from "@/components/ReportCard";
+import Toast from "@/components/Toast";
+
+type Question = { id: number; text: string };
+
+export default function Dashboard() {
+  const [question, setQuestion] = useState<Question | null>(null);
+  const [sessionId, setSessionId] = useState<number | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [report, setReport] = useState<ReportJson | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Start session mutation
+  const startSession = useMutation({
+    mutationFn: async (questionId: number) => {
+      const { data } = await api.post("/sessions", {
+        role: "SWE",
+        question_id: questionId,
+      });
+      return data.session_id;
+    },
+    onSuccess: (sessionId) => {
+      setSessionId(sessionId);
+      setError(null);
+    },
+    onError: (err) => {
+      console.error("Failed to start session:", err);
+      setError("Failed to start session. Please try again.");
+    },
+  });
+
+  // Enqueue job mutation
+  const enqueueJob = useMutation({
+    mutationFn: async (file: File) => {
+      if (!sessionId) throw new Error("No session ID");
+
+      const form = new FormData();
+      form.append("file", file);
+
+      const { data } = await api.post<{ job_id: string }>(
+        `/jobs/enqueue?session_id=${sessionId}`,
+        form,
+        { headers: { "Content-Type": "multipart/form-data" } }
+      );
+      return data;
+    },
+    onSuccess: (data) => {
+      setJobId(data.job_id);
+      setError(null);
+    },
+    onError: (err) => {
+      console.error("Failed to enqueue job:", err);
+      setError("Failed to process audio. Please try again.");
+    },
+  });
+
+  // Fetch report when job finishes
+  const fetchReport = useMutation({
+    mutationFn: async () => {
+      if (!sessionId) throw new Error("No session ID");
+      const { data } = await api.get<ReportJson>(`/report/${sessionId}`);
+      return data;
+    },
+    onSuccess: (data) => {
+      setReport(data);
+      setError(null);
+    },
+    onError: (err) => {
+      console.error("Failed to fetch report:", err);
+      setError("Failed to load report. Please try again.");
+    },
+  });
+
+  const handleQuestionLoad = (loadedQuestion: Question) => {
+    setQuestion(loadedQuestion);
+    setError(null);
+  };
+
+  const handleStartSession = async () => {
+    if (!question) {
+      setError("Please load a question first.");
+      return;
+    }
+    startSession.mutate(question.id);
+  };
+
+  const handleFileReady = async (file: File) => {
+    // Start session if not already started
+    if (!sessionId) {
+      await startSession.mutateAsync(question!.id);
+    }
+
+    // Enqueue the job
+    enqueueJob.mutate(file);
+  };
+
+  const handleJobFinished = () => {
+    fetchReport.mutate();
+  };
+
+  const handleNewSession = () => {
+    setQuestion(null);
+    setSessionId(null);
+    setJobId(null);
+    setReport(null);
+    setError(null);
+  };
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <header className="bg-white border-b border-gray-200">
+        <div className="max-w-4xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-bold text-gray-900">Interview Coach</h1>
+            <a
+              href={`${API_BASE}/docs`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-blue-600 hover:text-blue-700 underline"
+            >
+              API Docs
+            </a>
+          </div>
         </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="max-w-4xl mx-auto px-6 py-8 space-y-6">
+        {/* Error Toast */}
+        {error && (
+          <Toast
+            message={error}
+            type="error"
+            onClose={() => setError(null)}
+          />
+        )}
+
+        {/* Question Card */}
+        <QuestionCard question={question} onLoad={handleQuestionLoad} />
+
+        {/* Recording Section */}
+        {question && (
+          <div className="space-y-4">
+            <RecorderCard
+              disabled={!sessionId || enqueueJob.isPending}
+              onFile={handleFileReady}
+            />
+
+            {!sessionId && (
+              <div className="text-center">
+                <button
+                  onClick={handleStartSession}
+                  disabled={startSession.isPending}
+                  className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
+                >
+                  {startSession.isPending ? "Starting Session..." : "Start Session"}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Job Status */}
+        {jobId && (
+          <JobStatusCard jobId={jobId} onFinished={handleJobFinished} />
+        )}
+
+        {/* Report */}
+        {report && (
+          <div className="space-y-4">
+            <ReportCard report={report} />
+            <div className="text-center">
+              <button
+                onClick={handleNewSession}
+                className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-medium transition-colors"
+              >
+                Start New Session
+              </button>
+            </div>
+          </div>
+        )}
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
     </div>
   );
 }
