@@ -7,4 +7,6 @@ __pycache__/
 *.venv
 .DS_Store
 *.wav
+*.m4a
+*.pdf
 generate_perfect_speech.py
